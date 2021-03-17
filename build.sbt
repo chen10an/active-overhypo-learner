@@ -1,4 +1,4 @@
-name := "OverhypothesisLearner"
+name := "Active Overhypothesis Learner"
 version := "0.0.0"
 scalaVersion := "2.13.4"
 

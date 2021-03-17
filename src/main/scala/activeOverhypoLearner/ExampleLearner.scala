@@ -1,4 +1,4 @@
-package learner
+package example
 
 object BlicketEntropy {
 

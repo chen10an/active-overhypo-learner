@@ -1,10 +1,9 @@
+package activeOverhypoLearner
+
 case class Fform(name: String, f: Int => Double) {
   override def toString = name
-}
 // the function within each Fform object takes the number n of present blickets as input
-val conj = Fform("conj", (n: Int) => if(n >= 2) 1.0 else 0.0)
-val disj = Fform("disj", (n: Int) => if(n >= 1) 1.0 else 0.0)
-
+}
 case class Block(name: String) {override def toString=name}
 
 case class Event(blocks: Set[Block], outcome: Boolean)
@@ -29,25 +28,23 @@ case class Dist[T](atoms: Map[T, Double]) {
       Dist(atoms.map(p => p._1 -> p._2/denom))  
     }
   }
-
-  def prettyPrint = {
-    atoms.mkString("\n")
-  }
 }
 
-case class PhaseLearner(fformDist: Dist[Fform], allBlocks: Set[Block]) {
+case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], allBlocks: Set[Block]) {
+
+  val allFforms = fformDist.atoms.keys.toSet
   val allCombos = allBlocks.subsets().toIndexedSeq.map(_.asInstanceOf[Set[Block]])
   val possibleOutcomes = Vector(true, false)
   val allEvents = allCombos.map(combo => Event(combo, true)) ++ allCombos.map(combo => Event(combo, false))
-  // make joint hypotheses of functional form with the phase-specific structure (blocks and blickets)
-  val allHyps = allCombos.map(combo => Hyp(combo, disj)) ++ allCombos.map(combo => Hyp(combo, conj))
 
-  val uniformStructPrior = Dist[Set[Block]](allCombos.map(blickets => (blickets, 1.0)).toMap)
+  // make joint hypotheses of functional form with the phase-specific structure (blocks and blickets)
+  val allHyps = allFforms.map(fform => allCombos.map(combo => Hyp(combo, fform))).reduce(_ ++ _)
+
   val hypsDist = {
     // scale each structure probability with its corresponding form probability and then normalize
-    val dist = Dist[Hyp](allHyps.map(h => (h, uniformStructPrior.atoms(h.blickets) * fformDist.atoms(h.fform))).toMap).normalize
+    val dist = Dist[Hyp](allHyps.map(h => (h, structDist.atoms(h.blickets) * fformDist.atoms(h.fform))).toMap).normalize
     // check that all probabilities sum to 1 after normalizing:
-    assert(dist.atoms.map(h => h._2).sum == 1)
+    // assert(dist.atoms.map(h => h._2).sum == 1)
     println(s"Entropy of the joint (form and structure) distribution ${dist.entropy}")
     dist
   }
@@ -91,7 +88,14 @@ case class PhaseLearner(fformDist: Dist[Fform], allBlocks: Set[Block]) {
   def fformMarginal(jointDist: Dist[Hyp]): Dist[Fform] = {
     // for each functional form, get its marginal probability by summing the joint probabilities over all structures
     val dist = Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap)
-    assert(dist.atoms.map(_._2).sum == 1.0)
+    // assert(dist.atoms.map(_._2).sum == 1.0)
+    dist
+  }
+
+  def structMarginal(jointDist: Dist[Hyp]): Dist[Set[Block]] = {
+    // for each structure (i.e. set of blickets), get its marginal probability by summing the joint probabilities over all forms
+    val dist = Dist(allCombos.map(combo => (combo, jointDist.atoms.filter(_._1.blickets == combo).map(_._2).sum)).toMap)
+    // assert(dist.atoms.map(_._2).sum == 1.0 +- .00001)
     dist
   }
 
@@ -108,7 +112,7 @@ case class PhaseLearner(fformDist: Dist[Fform], allBlocks: Set[Block]) {
     // i.e. multiplying the likelihood of the event given a joint hypothesis with the prior of that joint hypothesis and then summing over all joint hypotheses
     val outcomeDist = Dist(possibleEvents.map(e => (e, hypsDist.atoms.map(tup => likelihood(e, tup._1) * tup._2).sum)).toMap)
 
-    assert(outcomeDist.atoms.values.sum == 1.0)
+    // assert(outcomeDist.atoms.values.sum == 1.0)
 
     outcomeDist
   }
@@ -134,65 +138,29 @@ case class PhaseLearner(fformDist: Dist[Fform], allBlocks: Set[Block]) {
 
   lazy val comboEntropies = allCombos.map(combo => (combo, comboEntropy(combo))).toMap 
 
-  def update(events: Vector[Event], allBlocks: Set[Block]): PhaseLearner = {
-    // sequentially update the joint distribution with all events and then return the final marginal form distribution wrapped within a new PhaseLearner object
+  def update(events: Vector[Event]): PhaseLearner = {
+    // return a same-phase learner with an updated **joint** hypsDist over the same blocks used in the current PhaseLearner
     val multiPost = multiPosterior(events)
-    assert(multiPost.atoms.values.sum == 1.0)
+    val postFformDist = fformMarginal(multiPost)
+    val postStructDist = structMarginal(multiPost)
+
+    PhaseLearner(postFformDist, postStructDist, allBlocks)
+  }
+
+  def transfer(events: Vector[Event], allBlocks: Set[Block]): PhaseLearner = {
+    // return a different-phase learner with an updated **marginal** distribution over functional forms
+    // this different-phase learner can use a different set of blocks (i.e., a different space of causal structures)
+    val multiPost = multiPosterior(events)
+    // assert(multiPost.atoms.values.sum == 1.0)
 
     val postFformDist = fformMarginal(multiPost)
-    assert(postFformDist.atoms.values.sum == 1.0)
+    // assert(postFformDist.atoms.values.sum == 1.0)
 
-    PhaseLearner(postFformDist, allBlocks)
+    val uniformStructPrior = Dist[Set[Block]](allCombos.map(blickets => (blickets, 1.0)).toMap)
+
+    PhaseLearner(postFformDist, uniformStructPrior, allBlocks)
   }
+  // TODO: combin update and transfer into a more compact representation
 }
 
-// prepare inputs to the constructor
-val allFforms = Set(disj, conj)
-val priorPDisj = 0.5
-val priorPConj = 1-priorPDisj
-assert(priorPDisj + priorPConj == 1)
 
-val fformDist = Dist(Map(disj -> priorPDisj, conj -> priorPConj))
-val allBlocks = Set("A", "B").map(Block(_))
-
-val toyLearner = PhaseLearner(fformDist, allBlocks)
-
-// observed event:
-val event = Event(Set(Block("A")), false)
-val hyp = toyLearner.allHyps(1)
-toyLearner.likelihood(event, hyp)
-
-val hypsPost = toyLearner.posterior(event)
-hypsPost.atoms(hyp)
-toyLearner.fformMarginal(hypsPost).atoms(conj)
-toyLearner.fformMarginal(hypsPost).atoms(disj)
-
-val event2 = Event(Set(Block("B")), false)
-val hypsPost2 = toyLearner.posterior(event2)
-hypsPost2.atoms(hyp)
-toyLearner.fformMarginal(hypsPost2).atoms(conj)
-toyLearner.fformMarginal(hypsPost2).atoms(disj)
-
-toyLearner.infoGain(hypsPost)
-toyLearner.hypsDist.entropy
-hypsPost.entropy
-
-val event3 = Event(Set(Block("A"), Block("B")), true)
-val hypsPost3 = toyLearner.posterior(event3)
-hypsPost3.atoms(hyp)
-toyLearner.fformMarginal(hypsPost3).atoms(conj)
-toyLearner.fformMarginal(hypsPost3).atoms(disj)
-
-val events = Vector(event, event3)
-
-toyLearner.multiPosterior(events)
-
-val nextLearner = toyLearner.update(events, allBlocks)
-
-nextLearner.fformDist.atoms(disj)
-nextLearner.fformDist.atoms(conj)
-nextLearner.hypsDist
-
-nextLearner.maxComboVals
-
-// todo: check multiPosterior calculation (write unit test)
