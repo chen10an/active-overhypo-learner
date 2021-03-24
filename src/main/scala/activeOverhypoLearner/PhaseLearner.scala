@@ -10,8 +10,7 @@ case class Event(blocks: Set[Block], outcome: Boolean)
 case class Hyp(blickets: Set[Block], fform: Fform) 
 case class Dist[T](atoms: Map[T, Double]) {
   lazy val entropy = {
-    // todo: change to log2
-    -atoms.values.map(v => if(v == 0) 0.0 else v*math.log(v)).sum
+    -atoms.values.map(v => if(v == 0) 0.0 else v*log2(v)).sum
   }
 
   private def log2(x: Double): Double = {
@@ -40,14 +39,8 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
   // make joint hypotheses of functional form with the phase-specific structure (blocks and blickets)
   val allHyps = allFforms.map(fform => allCombos.map(combo => Hyp(combo, fform))).reduce(_ ++ _)
 
-  val hypsDist = {
-    // scale each structure probability with its corresponding form probability and then normalize
-    val dist = Dist[Hyp](allHyps.map(h => (h, structDist.atoms(h.blickets) * fformDist.atoms(h.fform))).toMap).normalize
-    // check that all probabilities sum to 1 after normalizing:
-    // assert(dist.atoms.map(h => h._2).sum == 1)
-    println(s"Entropy of the joint (form and structure) distribution ${dist.entropy}")
-    dist
-  }
+  // scale each structure probability with its corresponding form probability and then normalize
+  val hypsDist = Dist[Hyp](allHyps.map(h => (h, structDist.atoms(h.blickets) * fformDist.atoms(h.fform))).toMap).normalize
 
   def likelihood(event: Event, hyp: Hyp): Double = {
     // likelihood of event given hyp (joint hypothesis on structure and form)
@@ -111,9 +104,8 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
     // for each (conditioned on the intervention) possible event, its probability is calculated by marginalizing over all joint hypotheses
     // i.e. multiplying the likelihood of the event given a joint hypothesis with the prior of that joint hypothesis and then summing over all joint hypotheses
     val outcomeDist = Dist(possibleEvents.map(e => (e, hypsDist.atoms.map(tup => likelihood(e, tup._1) * tup._2).sum)).toMap)
-
-    // assert(outcomeDist.atoms.values.sum == 1.0)
-
+    // note: the marginal probability of an outcome is the same as the normalizing constant for doing a Bayesian update where the outcome actually occured
+    
     outcomeDist
   }
 
@@ -131,12 +123,20 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
 
   lazy val comboValMap = allCombos.map(combo => (combo, comboInfoGain(combo))).toMap
   // intervention that maximizes information gain:
-  lazy val maxComboVals = {
-    val maxVal = comboValMap.values.max
-    comboValMap.filter(_._2 == maxVal)
-  }
+  // lazy val maxComboVals = {
+  //   val maxVal = comboValMap.values.max
+  //   comboValMap.filter(_._2 == maxVal)
+  // }
 
   lazy val comboEntropies = allCombos.map(combo => (combo, comboEntropy(combo))).toMap 
+
+  lazy val comboRanks: Map[Set[Block], Integer] = {
+    // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
+    // the second highest has rank 2 and so on.
+    // Multiple combos can share the same rank if they have the same info gain value.
+    val highestFirstDistinctVals = comboValMap.values.toVector.distinct.sorted.reverse
+    comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(tup._2) + 1))
+  }
 
   def update(events: Vector[Event]): PhaseLearner = {
     // return a same-phase learner with an updated **joint** hypsDist over the same blocks used in the current PhaseLearner
@@ -156,7 +156,7 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
     val postFformDist = fformMarginal(multiPost)
     // assert(postFformDist.atoms.values.sum == 1.0)
 
-    val uniformStructPrior = Dist[Set[Block]](allCombos.map(blickets => (blickets, 1.0)).toMap)
+    val uniformStructPrior = Dist[Set[Block]](allCombos.map(blickets => (blickets, 1.0)).toMap).normalize
 
     PhaseLearner(postFformDist, uniformStructPrior, allBlocks)
   }
