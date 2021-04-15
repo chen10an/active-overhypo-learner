@@ -1,4 +1,20 @@
 package activeOverhypoLearner
+// TODO: rename likelihood to something else cause that function doesn't actually calculate the likelihood; it's also misleading to call the "likelihood" function to calculate outcomeMarginal
+
+// object MathUtils {
+//   // compare Doubles with a precision tolerance
+//   // adapted from https://alvinalexander.com/scala/how-to-compare-floating-point-numbers-in-scala-float-double/
+
+//   val precision = 0.0000000001  // 10 decimals
+
+//   def ~=(x: Double, y: Double): Boolean = {
+//     if ((x - y).abs < precision) true else false
+//   }
+
+//   def ~>(x: Double, y: Double): Boolean = {
+//     if (x > (y + precision)) true else false
+//   }
+// }
 
 case class Fform(name: String, f: Int => Double) {
   override def toString = name
@@ -30,14 +46,20 @@ case class Dist[T](atoms: Map[T, Double]) {
 }
 
 case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], allBlocks: Set[Block]) {
+  // round before performing Double comparisons to allow for precision errors in the far-right decimal places
+  // adapted from https://stackoverflow.com/questions/11106886/scala-doubles-and-precision
+  val precisionScale = 10  // num decimal place rounding via BigDecimal --> comparisons are tolerant of imprecise differences beyond this num decimal places
+  val roundingMode = BigDecimal.RoundingMode.HALF_UP
 
   val allFforms = fformDist.atoms.keys.toSet
-  val allCombos = allBlocks.subsets().toIndexedSeq.map(_.asInstanceOf[Set[Block]])
+  val allCombos = structDist.atoms.keys.toSet
+
   val possibleOutcomes = Vector(true, false)
   val allEvents = allCombos.map(combo => Event(combo, true)) ++ allCombos.map(combo => Event(combo, false))
 
   // make joint hypotheses of functional form with the phase-specific structure (blocks and blickets)
-  val allHyps = allFforms.map(fform => allCombos.map(combo => Hyp(combo, fform))).reduce(_ ++ _)
+  val allHyps = allFforms.map(fform => allCombos.filter(x => fform.f(x.size) > 0.0).map(combo => Hyp(combo, fform))).reduce(_ ++ _)
+  // only consider blicket hypotheses that have a nonzero chance of activating the blicket machine
 
   // scale each structure probability with its corresponding form probability and then normalize
   val hypsDist = Dist[Hyp](allHyps.map(h => (h, structDist.atoms(h.blickets) * fformDist.atoms(h.fform))).toMap).normalize
@@ -115,10 +137,24 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
     outcomeDist.atoms.map(tup => infoGain(posterior(tup._1)) * tup._2).sum
   }
 
+  // TODO: 
+  def structComboInfoGain(combo: Set[Block]): Double = {
+    // expected information gain for an intervention: sum of info gain for each possible outcome (pos/neg) weighted by the probability of that outcome
+    val outcomeDist = outcomeMarginal(combo)
+    outcomeDist.atoms.map(tup => (structDist.entropy - structMarginal(posterior(tup._1)).entropy) * tup._2).sum
+  }
+
   def comboEntropy(combo: Set[Block]): Double = {
     // expected entropy of the posterior distribution after intervening with `combo`
     val outcomeDist = outcomeMarginal(combo)
     outcomeDist.atoms.map(tup => posterior(tup._1).entropy * tup._2).sum
+  }
+
+  // TODO: 
+  def structComboEntropy(combo: Set[Block]): Double = {
+    // expected entropy of the posterior distribution after intervening with `combo`
+    val outcomeDist = outcomeMarginal(combo)
+    outcomeDist.atoms.map(tup => structMarginal(posterior(tup._1)).entropy * tup._2).sum
   }
 
   lazy val comboValMap = allCombos.map(combo => (combo, comboInfoGain(combo))).toMap
@@ -128,14 +164,25 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
   //   comboValMap.filter(_._2 == maxVal)
   // }
 
-  lazy val comboEntropies = allCombos.map(combo => (combo, comboEntropy(combo))).toMap 
+  lazy val comboEntropies = allCombos.map(combo => (combo, comboEntropy(combo))).toMap
 
   lazy val comboRanks: Map[Set[Block], Integer] = {
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
     // the second highest has rank 2 and so on.
-    // Multiple combos can share the same rank if they have the same info gain value.
-    val highestFirstDistinctVals = comboValMap.values.toVector.distinct.sorted.reverse
-    comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(tup._2) + 1))
+    // Multiple combos can share the same rank if they have the same info gain value (with precision tolerance).
+    val highestFirstDistinctVals: Vector[BigDecimal] = comboValMap.values.map(BigDecimal(_).setScale(precisionScale, roundingMode)).toVector.distinct.sorted.reverse
+      comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(BigDecimal(tup._2).setScale(precisionScale, roundingMode)) + 1))
+  }
+
+  // TODO: integrate this nicely with the rest of the code
+  lazy val structComboEntropies = allCombos.map(combo => (combo, structComboEntropy(combo))).toMap
+  lazy val structComboValMap = allCombos.map(combo => (combo, structComboInfoGain(combo))).toMap
+  lazy val structComboRanks: Map[Set[Block], Integer] = {
+    // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
+    // the second highest has rank 2 and so on.
+    // Multiple combos can share the same rank if they have the same info gain value (with precision tolerance).
+    val highestFirstDistinctVals: Vector[BigDecimal] = structComboValMap.values.map(BigDecimal(_).setScale(precisionScale, roundingMode)).toVector.distinct.sorted.reverse
+      structComboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(BigDecimal(tup._2).setScale(precisionScale, roundingMode)) + 1))
   }
 
   def update(events: Vector[Event]): PhaseLearner = {
