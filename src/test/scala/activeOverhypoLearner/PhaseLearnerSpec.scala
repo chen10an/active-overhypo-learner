@@ -1,6 +1,6 @@
 package activeOverhypoLearnerSpec
 
-import activeOverhypoLearner._
+import learner._
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalactic._

@@ -1,4 +1,5 @@
-package activeOverhypoLearner
+package learner
+import utils.NumberUtils
 // TODO: rename likelihood to something else cause that function doesn't actually calculate the likelihood; it's also misleading to call the "likelihood" function to calculate outcomeMarginal
 
 // object MathUtils {
@@ -46,11 +47,6 @@ case class Dist[T](atoms: Map[T, Double]) {
 }
 
 case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], allBlocks: Set[Block]) {
-  // round before performing Double comparisons to allow for precision errors in the far-right decimal places
-  // adapted from https://stackoverflow.com/questions/11106886/scala-doubles-and-precision
-  val precisionScale = 10  // num decimal place rounding via BigDecimal --> comparisons are tolerant of imprecise differences beyond this num decimal places
-  val roundingMode = BigDecimal.RoundingMode.HALF_UP
-
   val allFforms = fformDist.atoms.keys.toSet
   val allCombos = structDist.atoms.keys.toSet
 
@@ -103,7 +99,6 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
   def fformMarginal(jointDist: Dist[Hyp]): Dist[Fform] = {
     // for each functional form, get its marginal probability by summing the joint probabilities over all structures
     val dist = Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap)
-    // assert(dist.atoms.map(_._2).sum == 1.0)
     dist
   }
 
@@ -170,8 +165,8 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
     // the second highest has rank 2 and so on.
     // Multiple combos can share the same rank if they have the same info gain value (with precision tolerance).
-    val highestFirstDistinctVals: Vector[BigDecimal] = comboValMap.values.map(BigDecimal(_).setScale(precisionScale, roundingMode)).toVector.distinct.sorted.reverse
-      comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(BigDecimal(tup._2).setScale(precisionScale, roundingMode)) + 1))
+    val highestFirstDistinctVals: Vector[BigDecimal] = comboValMap.values.map(NumberUtils.round(_)).toVector.distinct.sorted.reverse
+      comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(NumberUtils.round(tup._2)) + 1))
   }
 
   // TODO: integrate this nicely with the rest of the code
@@ -181,8 +176,8 @@ case class PhaseLearner(fformDist: Dist[Fform], structDist: Dist[Set[Block]], al
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
     // the second highest has rank 2 and so on.
     // Multiple combos can share the same rank if they have the same info gain value (with precision tolerance).
-    val highestFirstDistinctVals: Vector[BigDecimal] = structComboValMap.values.map(BigDecimal(_).setScale(precisionScale, roundingMode)).toVector.distinct.sorted.reverse
-      structComboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(BigDecimal(tup._2).setScale(precisionScale, roundingMode)) + 1))
+    val highestFirstDistinctVals: Vector[BigDecimal] = structComboValMap.values.map(NumberUtils.round(_)).toVector.distinct.sorted.reverse
+      structComboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(NumberUtils.round(tup._2)) + 1))
   }
 
   def update(events: Vector[Event]): PhaseLearner = {
