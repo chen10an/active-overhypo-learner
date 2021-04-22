@@ -1,6 +1,6 @@
 package priors
 
-import learner._
+import utils._
 
 trait PriorSpace {
   // prior hypothesis space of functional forms and causal structures
