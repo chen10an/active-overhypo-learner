@@ -1,7 +1,5 @@
 import utils._
 import learner._
-import priors._
-import sim._
 
 // simulation of model strategy wrt simple disj/conj space
 

@@ -1,4 +1,4 @@
-package priors
+package learner
 
 import utils._
 

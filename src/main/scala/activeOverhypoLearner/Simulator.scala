@@ -1,7 +1,6 @@
-package sim
+package learner
 
 import utils._
-import learner._
 import scala.util.Random
 import util.control.Breaks._
 
