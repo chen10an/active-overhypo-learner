@@ -3,22 +3,44 @@ package sim
 import utils._
 import learner._
 import scala.util.Random
+import util.control.Breaks._
 
 case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform) {
-  def run(nInterventions: Int): Vector[(Event, Double)] = {
-    var currentLearner = learner
+  def run(nSimulations: Int, nInterventions: Int): Array[Array[(Event, Double)]] = {
 
-    var eventSim = Vector.empty[(Event, Double)]
-    for (i <- 1 to nInterventions) {
-      // TODO: use softmax to sample intervention
-      val bestCombos = currentLearner.comboRanks.filter(_._2 == 1).keys.toIndexedSeq
-      val sampleBestCombo = getRandomElement(bestCombos, new Random)
-      val event = makeEvent(sampleBestCombo)
-      currentLearner = currentLearner.update(Vector(event))
-      eventSim = eventSim :+ (event, BigDecimal(currentLearner.hypsDist.entropy).setScale(5, BigDecimal.RoundingMode.HALF_UP).toDouble)
+    var sims = Array.empty[Array[(Event, Double)]]
+
+    for (i <- 1 to nSimulations) {
+
+      var ithLearner = learner
+      var ithSim = Array.empty[(Event, Double)]
+
+      var entropy = NumberUtils.round(ithLearner.hypsDist.entropy).toDouble
+      
+      for (j <- 1 to nInterventions) {
+        if (entropy == 0.0) {
+          // no more to be learned, so just append placeholders for keeping the length of all ithSim arrays the same (so that they can be smoothly injected into R)
+          val stopEvent = Event(Set(Block("STOP")), false)
+          val entropy = 0.0
+          ithSim = ithSim :+ (stopEvent, entropy)
+
+        } else {
+          // TODO: use softmax to sample intervention
+          val bestCombos = ithLearner.comboRanks.filter(_._2 == 1).keys.toIndexedSeq
+          val sampleBestCombo = getRandomElement(bestCombos, new Random)
+          val event = makeEvent(sampleBestCombo)
+
+          ithLearner = ithLearner.update(Vector(event))
+          entropy = NumberUtils.round(ithLearner.hypsDist.entropy).toDouble
+
+          ithSim = ithSim :+ (event, entropy)
+        }
+      }
+
+      sims = sims :+ ithSim
     }
 
-    eventSim
+    sims
   }
 
   def makeEvent(combo: Set[Block]): Event = {
