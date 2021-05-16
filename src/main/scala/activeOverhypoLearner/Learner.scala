@@ -17,7 +17,14 @@ trait Learner {
 
   // ***concrete***
   val allFforms: Set[Fform] = hypsDist.atoms.keys.map(_.fform).toSet
-  val allCombos: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
+  val allStructs: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
+
+  // in the pragmatic case:
+  val maxStructSize = allStructs.map(_.size).max
+  // the largest struct in a pragmatic hypothesis space should contain all blocks in the phase
+  val allBlocks: Set[Block] = allStructs.filter(_.size == maxStructSize).flatten
+  // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
+  val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
 
   def likelihood(event: Event, hyp: Hyp): Double = {
     // likelihood of event given hyp (joint hypothesis on structure and form)
@@ -63,7 +70,7 @@ trait Learner {
 
   def structMarginal(jointDist: Dist[Hyp]): Dist[Set[Block]] = {
     // for each structure (i.e. set of blickets), get its marginal probability by summing the joint probabilities over all forms
-    Dist(allCombos.map(combo => (combo, jointDist.atoms.filter(_._1.blickets == combo).map(_._2).sum)).toMap)
+    Dist(allStructs.map(combo => (combo, jointDist.atoms.filter(_._1.blickets == combo).map(_._2).sum)).toMap)
   }
 
   def outcomeMarginal(combo: Set[Block]): Dist[Event] = {
@@ -97,14 +104,14 @@ trait Learner {
     outcomeDist.atoms.map(tup => posterior(tup._1).entropy * tup._2).sum
   }
 
-  lazy val comboValMap = allCombos.map(combo => (combo, comboInfoGain(combo))).toMap
+  lazy val comboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo))).toMap
   // intervention that maximizes information gain:
   // lazy val maxComboVals = {
   //   val maxVal = comboValMap.values.max
   //   comboValMap.filter(_._2 == maxVal)
   // }
 
-  lazy val comboEntropies = allCombos.map(combo => (combo, comboEntropy(combo))).toMap
+  lazy val comboEntropies = allInterventions.map(combo => (combo, comboEntropy(combo))).toMap
 
   lazy val comboRanks: Map[Set[Block], Integer] = {
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,

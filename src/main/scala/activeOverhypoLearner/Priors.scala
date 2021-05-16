@@ -7,6 +7,12 @@ object PriorMaker {
   val disj = Fform("disj", (n: Int) => if(n >= 1) 1.0 else 0.0)
   val conj = Fform("conj", (n: Int) => if(n >= 2) 1.0 else 0.0)
 
+  def makeDisjPrior(allBlocks: Set[Block], isPragmatic: Boolean): Dist[Hyp] = {
+    val fformDist = Dist(Map(disj -> 1.0))
+
+    makeJointDist(allBlocks, isPragmatic, fformDist)
+  }
+
   def makeDisjConjPrior(priorPDisj: Double, allBlocks: Set[Block], isPragmatic: Boolean): Dist[Hyp] = {
     val priorPConj = {
       assert(priorPDisj >= 0.0 && priorPDisj <= 1.0)
@@ -19,6 +25,7 @@ object PriorMaker {
   }
 
   def makeSigmoidPrior(biasGainToP: Map[(Double, Double), Double], allBlocks: Set[Block], isPragmatic: Boolean): Dist[Hyp] = {
+    assert(NumberUtils.round(biasGainToP.values.sum).toDouble == 1.0)
 
     // get all combos of b and g and their joint probability (via multiplication, assuming prior independence)
     val fformDist = Dist(biasGainToP.map{case (bg, p) => {Fform(s"${bg._1}, ${bg._2}", (n: Int) => sigmoid(n, bg._1, bg._2)) -> p}})
