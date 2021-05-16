@@ -5,11 +5,14 @@ import scala.util.Random
 import util.control.Breaks._
 
 case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform) {
+  val random = new Random(0)
+
   def run(nSimulations: Int, nInterventions: Int): Array[Array[(Event, Double)]] = {
 
     var sims = Array.empty[Array[(Event, Double)]]
 
     for (i <- 1 to nSimulations) {
+      println(s"Simulation $i:")
 
       var ithLearner = learner
       var ithSim = Array.empty[(Event, Double)]
@@ -17,6 +20,8 @@ case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform
       var entropy = NumberUtils.round(ithLearner.hypsDist.entropy).toDouble
       
       for (j <- 1 to nInterventions) {
+        // https://stackoverflow.com/questions/3645045/in-scala-or-java-how-to-print-a-line-to-console-replacing-its-previous-content
+        printf("\r%2d", j)
         if (entropy == 0.0) {
           // no more to be learned, so just append placeholders for keeping the length of all ithSim arrays the same (so that they can be smoothly injected into R)
           val stopEvent = Event(Set(Block("STOP")), false)
@@ -26,7 +31,7 @@ case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform
         } else {
           // TODO: use softmax to sample intervention
           val bestCombos = ithLearner.comboRanks.filter(_._2 == 1).keys.toIndexedSeq
-          val sampleBestCombo = getRandomElement(bestCombos, new Random)
+          val sampleBestCombo = getRandomElement(bestCombos)
           val event = makeEvent(sampleBestCombo)
 
           ithLearner = ithLearner.update(Vector(event))
@@ -50,7 +55,7 @@ case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform
   }
 
   // https://alvinalexander.com/scala/get-random-element-from-list-of-elements-scala/
-  def getRandomElement[A](seq: Seq[A], random: Random): A = 
+  def getRandomElement[A](seq: Seq[A]): A = 
       seq(random.nextInt(seq.length))
 
 }
