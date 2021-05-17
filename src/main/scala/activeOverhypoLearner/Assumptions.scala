@@ -15,4 +15,8 @@ trait structInfoGain extends Learner {
     val outcomeDist = outcomeMarginal(combo)
     outcomeDist.atoms.map(tup => structMarginal(posterior(tup._1)).entropy * tup._2).sum
   }
+
+   override def update(events: Vector[Event]): PhaseLearner with structInfoGain = {
+     new PhaseLearner(multiPosterior(events)) with structInfoGain
+  }
 }
