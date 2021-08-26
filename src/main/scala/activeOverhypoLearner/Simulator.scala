@@ -4,44 +4,43 @@ import utils._
 import scala.util.Random
 import util.control.Breaks._
 
-case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform) {
-  val random = new Random(0)
+case class Simulator(trueBlickets: Set[Block], trueForm: Fform) {
 
-  def run(nSimulations: Int, nInterventions: Int): Array[Array[(Event, Double)]] = {
+  def run(learner: Learner, nSimulations: Int, nInterventions: Int): Array[Array[(Event, Double, Map[Hyp, Double], Map[Fform, Double], Map[Set[Block], Double])]] = {
 
-    var sims = Array.empty[Array[(Event, Double)]]
+    // track the event and the posterior values following that event (entropy, max joint hyp, max form, max struct)
+    var sims = Array.ofDim[(Event, Double, Map[Hyp, Double], Map[Fform, Double], Map[Set[Block], Double])](nSimulations, nInterventions)
 
-    for (i <- 1 to nSimulations) {
+    for (i <- 0 to nSimulations-1) {
       println(s"Simulation $i:")
 
       var ithLearner = learner
-      var ithSim = Array.empty[(Event, Double)]
-
-      var entropy = NumberUtils.round(ithLearner.hypsDist.entropy).toDouble
       
-      for (j <- 1 to nInterventions) {
+      for (j <- 0 to nInterventions-1) {
         // https://stackoverflow.com/questions/3645045/in-scala-or-java-how-to-print-a-line-to-console-replacing-its-previous-content
         printf("\r%2d", j)
-        if (entropy == 0.0) {
+
+        // stop if there is a priori no more to be learned, i.e., zero entropy
+        if (ithLearner.hypsDist.entropy == 0.0) {
           // no more to be learned, so just append placeholders for keeping the length of all ithSim arrays the same (so that they can be smoothly injected into R)
           val stopEvent = Event(Set(Block("STOP")), false)
-          val entropy = 0.0
-          ithSim = ithSim :+ (stopEvent, entropy)
+          sims(i)(j) = (stopEvent, 0.0, Map(), Map(), Map())
 
         } else {
-          // TODO: use softmax to sample intervention
-          val bestCombos = ithLearner.comboRanks.filter(_._2 == 1).keys.toIndexedSeq
-          val sampleBestCombo = getRandomElement(bestCombos)
-          val event = makeEvent(sampleBestCombo)
+          
+          val intervention: Set[Block] = ithLearner.chooseIntervention()
+          val event: Event = makeEvent(intervention)
 
-          ithLearner = ithLearner.update(Vector(event))
-          entropy = NumberUtils.round(ithLearner.hypsDist.entropy).toDouble
+          ithLearner = ithLearner.update(Vector(event))  // returns a new Learner object
 
-          ithSim = ithSim :+ (event, entropy)
+          // the different posterior distributions
+          val jointDist = ithLearner.hypsDist
+          val fformDist = ithLearner.fformMarginal(jointDist)
+          val structDist = ithLearner.structMarginal(jointDist)
+
+          sims(i)(j) = (event, jointDist.entropy, jointDist.maxAtoms, fformDist.maxAtoms, structDist.maxAtoms)
         }
       }
-
-      sims = sims :+ ithSim
     }
 
     sims
@@ -49,13 +48,9 @@ case class Simulator(learner: Learner, trueBlickets: Set[Block], trueForm: Fform
 
   def makeEvent(combo: Set[Block]): Event = {
     // make a full Event (combo and outcome pair) from a combo wrt the true blickets and form
+    // TODO: use Random to return the binary outcome base on the form's output probability
     val outcome = trueForm.f(combo.intersect(trueBlickets).size)
     val boolOutcome: Boolean = outcome == 1.0  // TODO: probably need to make this more robust and to generalize it to nondeterministic forms
     Event(combo, boolOutcome)
   }
-
-  // https://alvinalexander.com/scala/get-random-element-from-list-of-elements-scala/
-  def getRandomElement[A](seq: Seq[A]): A = 
-      seq(random.nextInt(seq.length))
-
 }
