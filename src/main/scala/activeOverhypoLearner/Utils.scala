@@ -1,5 +1,7 @@
 package utils
 
+import scala.util.Random
+
 case class Fform(name: String, f: Int => Double) {
   override def toString = name
 // the function within each Fform object takes the number n of present blickets as input
@@ -9,7 +11,7 @@ case class Block(name: String) {override def toString=name}
 case class Event(blocks: Set[Block], outcome: Boolean)
 case class Hyp(blickets: Set[Block], fform: Fform) 
 case class Dist[T](atoms: Map[T, Double]) {
-  lazy val entropy = {
+  lazy val entropy: Double = {
     -atoms.values.map(v => if(v == 0) 0.0 else v*log2(v)).sum
   }
 
@@ -36,4 +38,14 @@ object NumberUtils {
   // round before performing Double comparisons to allow for precision errors in the far-right decimal places
   // adapted from https://stackoverflow.com/questions/11106886/scala-doubles-and-precision
   def round(x: Double): BigDecimal = BigDecimal(x).setScale(precisionScale, roundingMode)
+}
+
+object RandUtils {
+  // TODO: implement softmax here
+
+  val random = new Random(0)  // seed for reproducibility
+
+  // https://alvinalexander.com/scala/get-random-element-from-list-of-elements-scala/
+  def getRandomElement[A](seq: Seq[A]): A =
+    seq(random.nextInt(seq.length))
 }

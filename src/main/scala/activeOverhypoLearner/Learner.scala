@@ -25,6 +25,7 @@ trait Learner {
   val allBlocks: Set[Block] = allStructs.filter(_.size == maxStructSize).flatten
   // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
   val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
+  // but below, where there is no need to make a distinction between struct vs. intervention, both are generalized as "combo", i.e., a combination of blocks
 
   def likelihood(event: Event, hyp: Hyp): Double = {
     // likelihood of event given hyp (joint hypothesis on structure and form)
@@ -81,6 +82,7 @@ trait Learner {
 
     // for each (conditioned on the intervention) possible event, its probability is calculated by marginalizing over all joint hypotheses
     // i.e. multiplying the likelihood of the event given a joint hypothesis with the prior of that joint hypothesis and then summing over all joint hypotheses
+    // TODO: "likelihood" is a misleading method name; it's actually the raw functional form (or 1-functional form) without the additional multiplicative constant! the method usage is correct here but the method name is misleading
     val outcomeDist = Dist(possibleEvents.map(e => (e, hypsDist.atoms.map(tup => likelihood(e, tup._1) * tup._2).sum)).toMap)
     // note: the marginal probability of an outcome is the same as the normalizing constant for doing a Bayesian update where the outcome actually occured
     
@@ -98,11 +100,13 @@ trait Learner {
     outcomeDist.atoms.map(tup => infoGain(posterior(tup._1)) * tup._2).sum
   }
 
-  def comboEntropy(combo: Set[Block]): Double = {
-    // expected entropy of the posterior distribution after intervening with `combo`
-    val outcomeDist = outcomeMarginal(combo)
-    outcomeDist.atoms.map(tup => posterior(tup._1).entropy * tup._2).sum
-  }
+  // def comboEntropy(combo: Set[Block]): Double = {
+  //   // expected entropy of the posterior distribution after intervening with `combo`
+  //   val outcomeDist = outcomeMarginal(combo)
+  //   outcomeDist.atoms.map(tup => posterior(tup._1).entropy * tup._2).sum
+  // }
+
+  // lazy val comboEntropies = allInterventions.map(combo => (combo, comboEntropy(combo))).toMap
 
   lazy val comboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo))).toMap
   // intervention that maximizes information gain:
@@ -111,14 +115,21 @@ trait Learner {
   //   comboValMap.filter(_._2 == maxVal)
   // }
 
-  lazy val comboEntropies = allInterventions.map(combo => (combo, comboEntropy(combo))).toMap
-
   lazy val comboRanks: Map[Set[Block], Integer] = {
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
     // the second highest has rank 2 and so on.
-    // Multiple combos can share the same rank if they have the same info gain value (with precision tolerance).
+    // Multiple combos can share the same rank if they have the same info gain value (with precision/rounding tolerance).
     val highestFirstDistinctVals: Vector[BigDecimal] = comboValMap.values.map(NumberUtils.round(_)).toVector.distinct.sorted.reverse
       comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(NumberUtils.round(tup._2)) + 1))
+  }
+
+  def chooseIntervention(): Set[Block] = {
+    // default behavior of this base Learner is to sample one of the rank 1 (information-maximizing) interventions (there can be multiple)
+
+    val rank1Combos: IndexedSeq[Set[Block]] = comboRanks.filter(_._2 == 1).keys.toIndexedSeq
+    val sampledCombo: Set[Block] = randUtils.getRandomElement(bestCombos)
+
+    sampledCombo
   }
 
 }
