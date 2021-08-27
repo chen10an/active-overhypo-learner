@@ -1,11 +1,40 @@
 package learner
 
 import utils._
+import scala.util.Random
 
 object PriorMaker {
+  val random = new Random(0)
 
   val disj = Fform("disj", (n: Int) => if(n >= 1) 1.0 else 0.0)
+  val noisy_disj = Fform("noisy_disj", (n: Int) => {
+    if (n == 1) {
+      0.75  // noise
+    } else if (n > 1) {
+        1.0
+    } else {
+        0.0
+    }})
+
   val conj = Fform("conj", (n: Int) => if(n >= 2) 1.0 else 0.0)
+  val noisy_conj = Fform("noisy_conj", (n: Int) => {
+    if (n == 2) {
+      0.75  // noise
+    } else if (n > 2) {
+        1.0
+    } else {
+        0.0
+    }})
+
+  val conj3 = Fform("conj3", (n: Int) => if(n >= 3) 1.0 else 0.0)
+  val noisy_conj3 = Fform("noisy_conj3", (n: Int) => {
+    if (n == 3) {
+      0.75  // noise
+    } else if (n > 3) {
+        1.0
+    } else {
+        0.0
+    }})
 
   def makeDisjPrior(allBlocks: Set[Block], isPragmatic: Boolean): Dist[Hyp] = {
     val fformDist = Dist(Map(disj -> 1.0))
@@ -29,6 +58,16 @@ object PriorMaker {
 
     // get all combos of b and g and their joint probability (via multiplication, assuming prior independence)
     val fformDist = Dist(biasGainToP.map{case (bg, p) => {Fform(s"${bg._1}, ${bg._2}", (n: Int) => sigmoid(n, bg._1, bg._2)) -> p}})
+
+    makeJointDist(allBlocks, isPragmatic, fformDist)
+  }
+
+  def makeEnumeratedPrior(fformToP: Map[Fform, Double], allBlocks: Set[Block], isPragmatic: Boolean): Dist[Hyp] = {
+    // this function makes it easy to input any arbitrarily enumerated space of functional forms (with associated probabilities), e.g. {disj, conj, conj3, noisy_disj, noisy_conj, noisy_conj3}
+
+    assert(NumberUtils.round(fformToP.values.sum).toDouble == 1.0)
+
+    val fformDist = Dist(fformToP)
 
     makeJointDist(allBlocks, isPragmatic, fformDist)
   }

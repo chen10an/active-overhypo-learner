@@ -127,7 +127,7 @@ trait Learner {
     // default behavior of this base Learner is to sample one of the rank 1 (information-maximizing) interventions (there can be multiple)
 
     val rank1Combos: IndexedSeq[Set[Block]] = comboRanks.filter(_._2 == 1).keys.toIndexedSeq
-    val sampledCombo: Set[Block] = RandUtils.getRandomElement(rank1Combos)
+    val sampledCombo: Set[Block] = RandUtils.sampleRandomElement(rank1Combos)
 
     sampledCombo
   }

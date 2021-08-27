@@ -21,8 +21,8 @@ case class Dist[T](atoms: Map[T, Double]) {
     var roundedMaxP: BigDecimal = 0.0  // highest value/probability
     var maxT = scala.collection.mutable.Set[T]()  // keys/hypotheses that have maxp
     for ((t, p) <- atoms) {
-      // 1 d.p. rounding allowance for the assertion
-      val assertionP = NumberUtils.round(p, 1)
+      // 3 d.p. rounding allowance for the assertion
+      val assertionP = NumberUtils.round(p, 3)
       assert(assertionP >= 0.0 && assertionP <= 1.0)
 
       // round to allow precision errors in comparisons
@@ -91,6 +91,8 @@ object RandUtils {
   val random = new Random(0)  // seed for reproducibility
 
   // https://alvinalexander.com/scala/get-random-element-from-list-of-elements-scala/
-  def getRandomElement[A](seq: Seq[A]): A =
-    seq(random.nextInt(seq.length))
+  def sampleRandomElement[A](seq: Seq[A]): A = seq(random.nextInt(seq.length))
+
+  // sample a positive outcome (true) with probability p
+  def sampleOutcome(p: Double): Boolean = random.nextDouble() < p
 }

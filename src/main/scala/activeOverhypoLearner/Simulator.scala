@@ -48,9 +48,9 @@ case class Simulator(trueBlickets: Set[Block], trueForm: Fform) {
 
   def makeEvent(combo: Set[Block]): Event = {
     // make a full Event (combo and outcome pair) from a combo wrt the true blickets and form
-    // TODO: use Random to return the binary outcome base on the form's output probability
-    val outcome = trueForm.f(combo.intersect(trueBlickets).size)
-    val boolOutcome: Boolean = outcome == 1.0  // TODO: probably need to make this more robust and to generalize it to nondeterministic forms
+
+    val pPos: Double = trueForm.f(combo.intersect(trueBlickets).size)
+    val boolOutcome: Boolean = RandUtils.sampleOutcome(pPos)
     Event(combo, boolOutcome)
   }
 }
