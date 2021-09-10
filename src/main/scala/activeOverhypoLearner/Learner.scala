@@ -15,18 +15,21 @@ trait Learner {
   // should return a learner with an updated hypsDist over the same joint hypotheses (forms and blickets) used in the current Learner
   def update(events: Vector[Event]): Learner
 
+  // should return a learner with the same marginal fform Dist while reinitializing structures (and the joint dist) using new blocks allBlocks
+  def transfer(allBlocks: Set[Block]): Learner
+
   // ***concrete***
   val fformBinSize: Double = 1.0  // override to get histogram approximation of the marginal fform entropy
 
-  val allFforms: Set[Fform] = hypsDist.atoms.keys.map(_.fform).toSet
-  val allStructs: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
+  lazy val allFforms: Set[Fform] = hypsDist.atoms.keys.map(_.fform).toSet
+  lazy val allStructs: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
 
   // in the pragmatic case:
-  val maxStructSize = allStructs.map(_.size).max
+  lazy val maxStructSize = allStructs.map(_.size).max
   // the largest struct in a pragmatic hypothesis space should contain all blocks in the phase
-  val allBlocks: Set[Block] = allStructs.filter(_.size == maxStructSize).flatten
+  lazy val allBlocks: Set[Block] = allStructs.filter(_.size == maxStructSize).flatten
   // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
-  val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
+  lazy val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
   // but below, where there is no need to make a distinction between struct vs. intervention, both are generalized as "combo", i.e., a combination of blocks
 
   def likelihood(event: Event, hyp: Hyp): Double = {

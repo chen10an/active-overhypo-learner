@@ -76,7 +76,7 @@ object PriorMaker {
     1.0 / (1.0 + math.exp(-(gain * (nblickets - bias))))
   }
 
-  private def makeJointDist(allBlocks: Set[Block], isPragmatic: Boolean, fformDist: Dist[Fform]): Dist[Hyp] = {
+  def makeJointDist(allBlocks: Set[Block], isPragmatic: Boolean, fformDist: Dist[Fform]): Dist[Hyp] = {
 
      val allFforms = fformDist.atoms.keys.toSet
 

@@ -3,24 +3,20 @@ import utils._
 
 case class PhaseLearner(hypsDist: Dist[Hyp]) extends Learner {
   def update(events: Vector[Event]): PhaseLearner = {
-    // return a same-phase learner with an updated **joint** hypsDist over the same blocks used in the current PhaseLearner
+    // return a same-phase learner with where the current PhaseLearner's **joint** hypsDist has been updated by `events`
+    // this same-phase learner would use the same hypothesis space (and thus the same blocks and blickets) as the current PhaseLearner
     PhaseLearner(multiPosterior(events))
   }
 
-  // def transfer(events: Vector[Event], allBlocks: Set[Block]): PhaseLearner = {
-  //   // return a different-phase learner with an updated **marginal** distribution over functional forms
-  //   // this different-phase learner can use a different set of blocks (i.e., a different space of causal structures)
-  //   val multiPost = multiPosterior(events)
-  //   // assert(multiPost.atoms.values.sum == 1.0)
+  def transfer(allBlocks: Set[Block]): PhaseLearner = {
+    // return a different-phase learner with the same **marginal** distribution over functional forms
+    // this different-phase learner can use a different set of blocks (i.e., a different space of causal structures)
 
-  //   val postFformDist = fformMarginal(multiPost)
-  //   // assert(postFformDist.atoms.values.sum == 1.0)
+    assert(NumberUtils.round(priorFformMarginal.atoms.values.sum) == 1.0)
+    val newJointDist = PriorMaker.makeJointDist(allBlocks, false, priorFformMarginal)
 
-  //   val uniformStructPrior = Dist[Set[Block]](allCombos.map(blickets => (blickets, 1.0)).toMap).normalize
-
-  //   PhaseLearner(postFformDist, uniformStructPrior, allBlocks)
-  // }
-  // // TODO: combin update and transfer into a more compact representation
+    PhaseLearner(newJointDist)
+  }
 }
 
 

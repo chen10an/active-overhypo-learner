@@ -47,7 +47,6 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
     }
 
     entropy = -entropy  // negate the sum
-    denom = NumberUtils.round(denom).toDouble  // in case the denominator is basically zero, barring precision errors
 
     // return all the desired transformations in one tuple
     (entropy, denom, roundedMaxP.toDouble, maxT)
@@ -62,12 +61,12 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
     // val denom = atoms.values.sum
     val denom = transformations._2
 
-    // return normalized copy
-    if (denom == 0.0) {
-      Dist(atoms.map(p => p._1 -> 0.0))  
-    } else {
-      Dist(atoms.map(p => p._1 -> p._2/denom))  
-    }
+    // if (NumberUtils.round(denom) == 0.0) {  // in case the denominator is basically zero, barring precision errors
+    //   Dist(atoms.map(p => p._1 -> 0.0))  
+    // } else {
+
+    // return normalized copy with the same binSize
+    Dist(atoms.map(p => p._1 -> p._2/denom), binSize)
   }
 
   // return the highest probability density points in the same format as the input atoms
