@@ -10,7 +10,9 @@ case class Block(name: String) {override def toString=name}
 
 case class Event(blocks: Set[Block], outcome: Boolean)
 case class Hyp(blickets: Set[Block], fform: Fform) 
-case class Dist[T](atoms: Map[T, Double]) {
+case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
+  // binSize is used for calculating the histogram approximation of entropy when the distribution is a binned, discrete approximation of a continuous distribution (e.g., a gamma distribution over continuous bias or gain values)
+  // assuming binSize is constant throughout all atoms
 
   lazy val transformations = {
     // use one loop through the full hypothesis space to calculate all desired transformations
@@ -38,7 +40,7 @@ case class Dist[T](atoms: Map[T, Double]) {
 
       // calculate plogp (to be summed for entropy)
       if (p != 0.0) {
-        entropy += p*log2(p)
+        entropy += p*log2(p/binSize)  // divide by binSize for histogram approximation, same as regular discrete entropy when binSize=1
       }
 
       denom += p

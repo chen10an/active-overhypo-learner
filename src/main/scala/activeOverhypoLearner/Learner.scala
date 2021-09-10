@@ -16,6 +16,8 @@ trait Learner {
   def update(events: Vector[Event]): Learner
 
   // ***concrete***
+  val fformBinSize: Double = 1.0  // override to get histogram approximation of the marginal fform entropy
+
   val allFforms: Set[Fform] = hypsDist.atoms.keys.map(_.fform).toSet
   val allStructs: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
 
@@ -66,13 +68,18 @@ trait Learner {
 
   def fformMarginal(jointDist: Dist[Hyp]): Dist[Fform] = {
     // for each functional form, get its marginal probability by summing the joint probabilities over all structures
-    Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap)
+    // the returned marginal distribution supports histogram approximations of entropy, depending on the (overridden) value of fformBinSize
+
+    Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap, fformBinSize)
   }
 
   def structMarginal(jointDist: Dist[Hyp]): Dist[Set[Block]] = {
     // for each structure (i.e. set of blickets), get its marginal probability by summing the joint probabilities over all forms
     Dist(allStructs.map(combo => (combo, jointDist.atoms.filter(_._1.blickets == combo).map(_._2).sum)).toMap)
   }
+
+  lazy val priorFformMarginal: Dist[Fform] = fformMarginal(hypsDist)
+  lazy val priorStructMarginal: Dist[Set[Block]] = structMarginal(hypsDist)
 
   def outcomeMarginal(combo: Set[Block]): Dist[Event] = {
 
@@ -89,38 +96,52 @@ trait Learner {
     outcomeDist
   }
 
-  def infoGain(hypsPost: Dist[Hyp]): Double = {
+  def infoGain(hypsPost: Dist[Hyp], over: String = "joint"): Double = {
     // information gain: entropy of prior - entropy of posterior
-    hypsDist.entropy - hypsPost.entropy
+    // over parameter chooses what to gain information over: full joint distribution, or the marginal distribution of fform or struct
+
+    val possible_overs = Set("joint", "fform", "struct") 
+    assert(possible_overs(over))  // check containment
+
+    var ret: Double = Double.NaN
+
+    if (over == "joint") {
+      ret = hypsDist.entropy - hypsPost.entropy
+    } else if (over == "fform") {
+      ret = priorFformMarginal.entropy - fformMarginal(hypsPost).entropy
+    } else if (over == "struct") {
+      ret = priorStructMarginal.entropy - structMarginal(hypsPost).entropy
+    }
+
+    ret
   }
 
-  def comboInfoGain(combo: Set[Block]): Double = {
+  def comboInfoGain(combo: Set[Block], over: String = "joint"): Double = {
     // expected information gain for an intervention: sum of info gain for each possible outcome (pos/neg) weighted by the probability of that outcome
+    // use the over parameter to specify which distribution (joint, marginal form, or marginal struct) to calculate entropies on
+
     val outcomeDist = outcomeMarginal(combo)
-    outcomeDist.atoms.map(tup => infoGain(posterior(tup._1)) * tup._2).sum
+    outcomeDist.atoms.map(tup => infoGain(posterior(tup._1), over) * tup._2).sum
   }
 
-  // def comboEntropy(combo: Set[Block]): Double = {
-  //   // expected entropy of the posterior distribution after intervening with `combo`
-  //   val outcomeDist = outcomeMarginal(combo)
-  //   outcomeDist.atoms.map(tup => posterior(tup._1).entropy * tup._2).sum
-  // }
+  lazy val comboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "joint"))).toMap
+  lazy val fformComboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "fform"))).toMap
+  lazy val structComboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "struct"))).toMap
 
-  // lazy val comboEntropies = allInterventions.map(combo => (combo, comboEntropy(combo))).toMap
-
-  lazy val comboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo))).toMap
   // intervention that maximizes information gain:
   // lazy val maxComboVals = {
   //   val maxVal = comboValMap.values.max
   //   comboValMap.filter(_._2 == maxVal)
   // }
 
+  // note that this uses the JOINT comboValMap by default:
   lazy val comboRanks: Map[Set[Block], Integer] = {
     // Rank each combo (i.e. intervention) so that the highest info gain combo has rank 1,
     // the second highest has rank 2 and so on.
     // Multiple combos can share the same rank if they have the same info gain value (with precision/rounding tolerance).
     val highestFirstDistinctVals: Vector[BigDecimal] = comboValMap.values.map(NumberUtils.round(_)).toVector.distinct.sorted.reverse
-      comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(NumberUtils.round(tup._2)) + 1))
+
+    comboValMap.map(tup => tup._1 -> (highestFirstDistinctVals.indexOf(NumberUtils.round(tup._2)) + 1))
   }
 
   def chooseIntervention(): Set[Block] = {
