@@ -41,8 +41,12 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
       }
 
       // calculate plogp (to be summed for entropy)
-      if (p > 0.0) {
-        entropy += p*log2(p/binSize)  // divide by binSize for histogram approximation, same as regular discrete entropy when binSize=1
+      if (p != 0.0) {
+         // divide by binSize for histogram approximation, same as regular discrete entropy when binSize=1
+        val entropyUpdate = p*log2(p/binSize)
+        assert(!entropyUpdate.isNaN)  // catching negative p, which would cause log2 to return NaN
+
+        entropy += entropyUpdate
       }
 
       denom += p
