@@ -28,9 +28,9 @@ trait Learner {
 
   // not using the pragmatic case for now:
   // // in the pragmatic case:
-  // lazy val maxStructSize = allStructs.map(_.size).max
+  lazy val maxStructSize = allStructs.map(_.size).max
   // // the largest struct in a pragmatic hypothesis space should contain all blocks in the phase
-  // lazy val allBlocks: Set[Block] = allStructs.find(_.size == maxStructSize).get  // just find the first occurrence
+  lazy val allBlocks: Set[Block] = allStructs.find(_.size == maxStructSize).get  // just find the first occurrence
   // // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
   // lazy val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
 

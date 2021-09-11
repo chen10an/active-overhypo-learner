@@ -14,7 +14,10 @@ trait Old extends PhaseLearner {
     Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap, fformBinSize)
   }
 
-  // structMarginal also looked similar
+  override def structMarginal(jointDist: Dist[Hyp]): Dist[Set[Block]] = {
+
+    Dist(allStructs.map(struct => (struct, jointDist.atoms.filter(_._1.blickets == struct).map(_._2).sum)).toMap)
+  }
 }
 
 trait Values extends PhaseLearner {
@@ -84,7 +87,7 @@ object Profiling {
       curr.structComboValMap
     }
 
-    println("New implementation:")
+    println("Test implementation:")
     time {
       test.fformComboValMap
       test.structComboValMap
