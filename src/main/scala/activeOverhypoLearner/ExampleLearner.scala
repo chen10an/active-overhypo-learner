@@ -92,7 +92,7 @@ case class Dist[T](atoms: Map[T,Double]) {
   }
 }
 
-object Main extends App {
-  BlicketEntropy.demo(priorPBlicket=.5,priorPConj=.1)
-  BlicketEntropy.demo(priorPBlicket=.5,priorPConj=.5)
-}
+// object Main extends App {
+//   BlicketEntropy.demo(priorPBlicket=.5,priorPConj=.1)
+//   BlicketEntropy.demo(priorPBlicket=.5,priorPConj=.5)
+// }

@@ -22,13 +22,15 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
     var denom = 0.0  // for normalization
     var roundedMaxP: BigDecimal = 0.0  // highest value/probability
     var maxT = scala.collection.mutable.Set[T]()  // keys/hypotheses that have maxp
-    for ((t, p) <- atoms) {
-      // 3 d.p. rounding allowance for the assertion
-      val assertionP = NumberUtils.round(p, 3)
-      assert(assertionP >= 0.0 && assertionP <= 1.0)
 
+    // these are only updated when T is Hyp:
+    var fformMarginalAtoms = collection.mutable.Map[Fform, Double]()
+    var structMarginalAtoms = collection.mutable.Map[Set[Block], Double]()
+
+    for ((t, p) <- atoms) {
       // round to allow precision errors in comparisons
       val roundedP = NumberUtils.round(p)
+      assert(roundedP >= 0.0 && roundedP <= 1.0)
 
       // update the max probability and its associated keys/hypotheses
       if (roundedP > roundedMaxP) {
@@ -39,17 +41,26 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
       }
 
       // calculate plogp (to be summed for entropy)
-      if (p != 0.0) {
+      if (p > 0.0) {
         entropy += p*log2(p/binSize)  // divide by binSize for histogram approximation, same as regular discrete entropy when binSize=1
       }
 
       denom += p
+
+      // only update the marginal fform and struct distributions if the keys have the Hyp type
+      t match {
+        case hyp: Hyp =>
+          // increment the relevant marginal probabilities
+          fformMarginalAtoms(hyp.fform) = fformMarginalAtoms.getOrElseUpdate(hyp.fform, 0.0) + p
+          structMarginalAtoms(hyp.blickets) = structMarginalAtoms.getOrElseUpdate(hyp.blickets, 0.0) + p
+        case _ =>  // do nothing otherwise
+      }
     }
 
     entropy = -entropy  // negate the sum
 
     // return all the desired transformations in one tuple
-    (entropy, denom, roundedMaxP.toDouble, maxT)
+    (entropy, denom, roundedMaxP.toDouble, maxT, fformMarginalAtoms, structMarginalAtoms)
   }
 
   lazy val entropy: Double = {
@@ -61,16 +72,20 @@ case class Dist[T](atoms: Map[T, Double], binSize: Double = 1.0) {
     // val denom = atoms.values.sum
     val denom = transformations._2
 
-    // if (NumberUtils.round(denom) == 0.0) {  // in case the denominator is basically zero, barring precision errors
-    //   Dist(atoms.map(p => p._1 -> 0.0))  
-    // } else {
-
     // return normalized copy with the same binSize
-    Dist(atoms.map(p => p._1 -> p._2/denom), binSize)
+    if (denom == 0.0) {
+      Dist(atoms.map(p => p._1 -> 0.0), binSize)  
+    } else {
+      Dist(atoms.map(p => p._1 -> p._2/denom), binSize)
+    }
   }
 
   // return the highest probability density points in the same format as the input atoms
   lazy val maxAtoms: Map[T, Double] = transformations._4.map(t => (t, transformations._3)).toMap
+
+  // these are only non-empty when T is Hyp; toMap turns them from mutable to immutable, which is the required type for initializing Dist
+  lazy val fformMarginalAtoms: Map[Fform, Double] = transformations._5.toMap
+  lazy val structMarginalAtoms = transformations._6.toMap
 
   private def log2(x: Double): Double = {
     math.log(x)/math.log(2)
@@ -96,4 +111,14 @@ object RandUtils {
 
   // sample a positive outcome (true) with probability p
   def sampleOutcome(p: Double): Boolean = random.nextDouble() < p
+}
+
+object TimeUtils {
+  def time[R](block: => R): R = {
+    val t0 = System.nanoTime()
+    val result = block    // call-by-name
+    val t1 = System.nanoTime()
+    println("Elapsed time: " + (t1 - t0).toDouble/1000000.0 + "ms")
+    result
+  }
 }

@@ -21,15 +21,19 @@ trait Learner {
   // ***concrete***
   val fformBinSize: Double = 1.0  // override to get histogram approximation of the marginal fform entropy
 
-  lazy val allFforms: Set[Fform] = hypsDist.atoms.keys.map(_.fform).toSet
-  lazy val allStructs: Set[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toSet
+  lazy val allFforms: Vector[Fform] = hypsDist.atoms.keys.map(_.fform).toVector
+  lazy val allStructs: Vector[Set[Block]] = hypsDist.atoms.keys.map(_.blickets).toVector
 
-  // in the pragmatic case:
-  lazy val maxStructSize = allStructs.map(_.size).max
-  // the largest struct in a pragmatic hypothesis space should contain all blocks in the phase
-  lazy val allBlocks: Set[Block] = allStructs.filter(_.size == maxStructSize).flatten
-  // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
-  lazy val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
+  lazy val allInterventions = allStructs
+
+  // not using the pragmatic case for now:
+  // // in the pragmatic case:
+  // lazy val maxStructSize = allStructs.map(_.size).max
+  // // the largest struct in a pragmatic hypothesis space should contain all blocks in the phase
+  // lazy val allBlocks: Set[Block] = allStructs.find(_.size == maxStructSize).get  // just find the first occurrence
+  // // the possible pragmatic structs is not the same as the possible interventions (all combos of allBlocks)
+  // lazy val allInterventions: Set[Set[Block]] = allBlocks.subsets().toSet
+
   // but below, where there is no need to make a distinction between struct vs. intervention, both are generalized as "combo", i.e., a combination of blocks
 
   def likelihood(event: Event, hyp: Hyp): Double = {
@@ -73,12 +77,21 @@ trait Learner {
     // for each functional form, get its marginal probability by summing the joint probabilities over all structures
     // the returned marginal distribution supports histogram approximations of entropy, depending on the (overridden) value of fformBinSize
 
-    Dist(allFforms.map(fform => (fform, jointDist.atoms.filter(_._1.fform == fform).map(_._2).sum)).toMap, fformBinSize)
+    Dist(jointDist.fformMarginalAtoms, fformBinSize)
+
+    // val fformAtoms: Map[Fform, Double] = allFforms.map(fform => fform -> (getFformHyps(fform) collect jointDist.atoms).sum).toMap
+
+    // Dist(fformAtoms, fformBinSize)
   }
 
   def structMarginal(jointDist: Dist[Hyp]): Dist[Set[Block]] = {
     // for each structure (i.e. set of blickets), get its marginal probability by summing the joint probabilities over all forms
-    Dist(allStructs.map(combo => (combo, jointDist.atoms.filter(_._1.blickets == combo).map(_._2).sum)).toMap)
+
+    Dist(jointDist.structMarginalAtoms)
+
+    // val structAtoms: Map[Set[Block], Double] = allStructs.map(blickets => blickets -> (getStructHyps(blickets) collect jointDist.atoms).sum).toMap
+
+    // Dist(structAtoms)
   }
 
   lazy val priorFformMarginal: Dist[Fform] = fformMarginal(hypsDist)
@@ -99,37 +112,39 @@ trait Learner {
     outcomeDist
   }
 
-  def infoGain(hypsPost: Dist[Hyp], over: String = "joint"): Double = {
+  def infoGain(hypsPost: Dist[Hyp]): Map[String, Double] = {
     // information gain: entropy of prior - entropy of posterior
-    // over parameter chooses what to gain information over: full joint distribution, or the marginal distribution of fform or struct
+    // reuse the same hypsPost to calculate all types of entropies: full joint, marginal fform, or marginal struct
 
-    val possible_overs = Set("joint", "fform", "struct") 
-    assert(possible_overs(over))  // check containment
-
-    var ret: Double = Double.NaN
-
-    if (over == "joint") {
-      ret = hypsDist.entropy - hypsPost.entropy
-    } else if (over == "fform") {
-      ret = priorFformMarginal.entropy - fformMarginal(hypsPost).entropy
-    } else if (over == "struct") {
-      ret = priorStructMarginal.entropy - structMarginal(hypsPost).entropy
-    }
-
-    ret
+    Map(
+      "joint" -> (hypsDist.entropy - hypsPost.entropy),
+      "fform" -> (priorFformMarginal.entropy - fformMarginal(hypsPost).entropy),
+      "struct" -> (priorStructMarginal.entropy - structMarginal(hypsPost).entropy)
+    )
   }
 
-  def comboInfoGain(combo: Set[Block], over: String = "joint"): Double = {
+  def comboInfoGain(combo: Set[Block]): Map[String, Double] = {
     // expected information gain for an intervention: sum of info gain for each possible outcome (pos/neg) weighted by the probability of that outcome
-    // use the over parameter to specify which distribution (joint, marginal form, or marginal struct) to calculate entropies on
 
-    val outcomeDist = outcomeMarginal(combo)
-    outcomeDist.atoms.map(tup => infoGain(posterior(tup._1), over) * tup._2).sum
+    val outcomeAtoms: Map[Event, Double] = outcomeMarginal(combo).atoms
+    val outcomeToInfoGain: Map[Event, Map[String, Double]] = outcomeAtoms.keys.map(o => o -> infoGain(posterior(o))).toMap
+
+    // outcomeDist.atoms.map(tup => infoGain(posterior(tup._1)) * tup._2).sum
+
+    Map(
+      "joint" -> (outcomeAtoms.map{case (o, p) => {outcomeToInfoGain(o)("joint") * p}}.sum),
+      "fform" -> (outcomeAtoms.map{case (o, p) => {outcomeToInfoGain(o)("fform") * p}}.sum),
+      "struct" -> (outcomeAtoms.map{case (o, p) => {outcomeToInfoGain(o)("struct") * p}}.sum)
+    )
   }
 
-  lazy val comboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "joint"))).toMap
-  lazy val fformComboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "fform"))).toMap
-  lazy val structComboValMap = allInterventions.map(combo => (combo, comboInfoGain(combo, "struct"))).toMap
+  // cache together
+  lazy val comboToDistToEIG: Map[Set[Block], Map[String, Double]] = allInterventions.map(combo => (combo, comboInfoGain(combo))).toMap
+
+  // flatten into separate maps
+  lazy val comboValMap = comboToDistToEIG.map({case (combo, distToEIG) => {combo -> distToEIG("joint")}})
+  lazy val fformComboValMap = comboToDistToEIG.map({case (combo, distToEIG) => {combo -> distToEIG("fform")}})
+  lazy val structComboValMap = comboToDistToEIG.map({case (combo, distToEIG) => {combo -> distToEIG("struct")}})
 
   // intervention that maximizes information gain:
   // lazy val maxComboVals = {

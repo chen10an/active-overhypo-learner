@@ -1,8 +1,6 @@
 package learner
 
 import utils._
-import scala.util.Random
-import util.control.Breaks._
 
 case class Simulator(trueBlickets: Set[Block], trueForm: Fform) {
 
