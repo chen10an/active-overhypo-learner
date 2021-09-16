@@ -12,7 +12,7 @@ case class PhaseLearner(hypsDist: Dist[Hyp]) extends Learner {
     // return a different-phase learner with the same **marginal** distribution over functional forms
     // this different-phase learner can use a different set of blocks (i.e., a different space of causal structures)
 
-    assert(NumberUtils.round(priorFformMarginal.atoms.values.sum) == 1.0)
+    assert(NumberUtils.round(priorFformMarginal.atoms.values.sum) == 1.0 || NumberUtils.round(priorFformMarginal.atoms.values.sum) == 0.0)
     val newJointDist = PriorMaker.makeJointDist(allBlocks, false, priorFformMarginal)
 
     PhaseLearner(newJointDist)
