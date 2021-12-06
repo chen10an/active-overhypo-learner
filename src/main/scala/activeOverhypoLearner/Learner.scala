@@ -16,7 +16,7 @@ trait Learner {
   def update(events: Vector[Event]): Learner
 
   // should return a learner with the same marginal fform Dist while reinitializing structures (and the joint dist) using new blocks allBlocks
-  def transfer(allBlocks: Set[Block]): Learner
+  def transfer(allBlocks: Set[Block], currWeight: Double, otherFformDist: Dist[Fform]): Learner
 
   // ***concrete***
   val fformBinSize: Double = 1.0  // override to get histogram approximation of the marginal fform entropy

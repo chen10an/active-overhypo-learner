@@ -8,12 +8,27 @@ case class PhaseLearner(hypsDist: Dist[Hyp]) extends Learner {
     PhaseLearner(multiPosterior(events))
   }
 
-  def transfer(allBlocks: Set[Block]): PhaseLearner = {
-    // return a different-phase learner with the same **marginal** distribution over functional forms
-    // this different-phase learner can use a different set of blocks (i.e., a different space of causal structures)
+  def transfer(allBlocks: Set[Block], currWeight: Double = 1.0, otherFformDist: Dist[Fform] = Dist(Map.empty[Fform, Double])): PhaseLearner = {
+    // return a different-phase learner with the same or mixed **marginal** distribution over functional forms
+
+    // allBlocks: a set of blocks (can be different from the current PhaseLearner's blocks, i.e., a different space of causal structures) for initializing a different-phase learner
+    // currWeight: mixture weight to multiply with the current PhaseLearner's marginal distribution of forms; this distribution will be mixed with mixDist
+    // otherFformDist: distribution of forms, has mixture weight 1-currWeight
 
     assert(NumberUtils.round(priorFformMarginal.atoms.values.sum) == 1.0 || NumberUtils.round(priorFformMarginal.atoms.values.sum) == 0.0)
-    val newJointDist = PriorMaker.makeJointDist(allBlocks, false, priorFformMarginal)
+
+    var mixedFformMarginal: Dist[Fform] = priorFformMarginal
+    if (currWeight < 1.0) {
+      // check otherFformDist has the same keys/forms as the current PhaseLearner's forms
+      assert(otherFformDist.atoms.keys.toSet.equals(priorFformMarginal.atoms.keys.toSet))
+
+      val weightedCurr: Map[Fform, Double] = priorFformMarginal.atoms.map{case (fform, p) => {fform -> p*currWeight}}
+      val weightedOther: Map[Fform, Double] = otherFformDist.atoms.map{case (fform, p) => {fform -> p*(1.0 - currWeight)}}
+
+      mixedFformMarginal = Dist(weightedCurr.map{case (fform, p) => {fform -> (p + weightedOther(fform))}})
+    }
+
+    val newJointDist = PriorMaker.makeJointDist(allBlocks, false, mixedFformMarginal)
 
     PhaseLearner(newJointDist)
   }
