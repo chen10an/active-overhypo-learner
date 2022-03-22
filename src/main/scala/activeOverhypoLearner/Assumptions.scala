@@ -17,3 +17,18 @@ trait point1FformBinSize extends PhaseLearner {
     new PhaseLearner(newJointDist) with point1FformBinSize
   }
 }
+
+trait point15FformBinSize extends PhaseLearner {
+
+  override val fformBinSize: Double = 0.15
+
+  override def update(events: Vector[Event]): PhaseLearner with point15FformBinSize = {
+    new PhaseLearner(multiPosterior(events)) with point15FformBinSize
+  }
+
+  override def transfer(allBlocks: Set[Block], currWeight: Double = 1.0, otherFformDist: Dist[Fform] = Dist(Map.empty[Fform, Double])): PhaseLearner with point15FformBinSize = {
+    val newJointDist: Dist[Hyp] = super.transfer(allBlocks, currWeight, otherFformDist).hypsDist
+
+    new PhaseLearner(newJointDist) with point15FformBinSize
+  }
+}
